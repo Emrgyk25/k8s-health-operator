@@ -4,6 +4,7 @@ import (
 	"flag"
 	"net/http"
 	"os"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -14,6 +15,8 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	srev1alpha1 "github.com/your-org/k8s-health-operator/api/v1alpha1"
+	healthcontroller "github.com/your-org/k8s-health-operator/internal/controller"
+	"github.com/your-org/k8s-health-operator/internal/remediation"
 )
 
 var (
@@ -48,6 +51,17 @@ func main() {
 	})
 	if err != nil {
 		ctrl.Log.Error(err, "unable to start manager")
+		os.Exit(1)
+	}
+
+	cooldown := remediation.NewCooldownStore(5 * time.Minute)
+
+	if err := (&healthcontroller.HealthPolicyReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Cooldown: cooldown,
+	}).SetupWithManager(mgr); err != nil {
+		ctrl.Log.Error(err, "unable to create HealthPolicy controller")
 		os.Exit(1)
 	}
 
