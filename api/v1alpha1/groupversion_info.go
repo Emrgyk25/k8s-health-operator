@@ -21,6 +21,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		GroupVersion,
 		&HealthPolicy{},
 		&HealthPolicyList{},
+		&QueueEvent{},
+		&QueueEventList{},
 	)
 
 	return nil

@@ -3,12 +3,12 @@ package v1alpha1
 import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 type HealthPolicySpec struct {
-	CheckIntervalSeconds       int32         `json:"checkIntervalSeconds,omitempty"`
-	RemediationCooldownSeconds int32        `json:"remediationCooldownSeconds,omitempty"`
-	PrometheusURL             string        `json:"prometheusUrl,omitempty"`
-	TargetNamespaces          []string      `json:"targetNamespaces,omitempty"`
-	PodRules                  []PodRule     `json:"podRules,omitempty"`
-	NodeRules                 []NodeRule    `json:"nodeRules,omitempty"`
+	CheckIntervalSeconds       int32      `json:"checkIntervalSeconds,omitempty"`
+	RemediationCooldownSeconds int32      `json:"remediationCooldownSeconds,omitempty"`
+	PrometheusURL              string     `json:"prometheusUrl,omitempty"`
+	TargetNamespaces           []string   `json:"targetNamespaces,omitempty"`
+	PodRules                   []PodRule  `json:"podRules,omitempty"`
+	NodeRules                  []NodeRule `json:"nodeRules,omitempty"`
 }
 
 type PodRule struct {
@@ -26,8 +26,8 @@ type NodeRule struct {
 
 type HealthPolicyStatus struct {
 	LastCheckTime metav1.Time `json:"lastCheckTime,omitempty"`
-	FindingsCount int32      `json:"findingsCount,omitempty"`
-	LastMessage   string     `json:"lastMessage,omitempty"`
+	FindingsCount int32       `json:"findingsCount,omitempty"`
+	LastMessage   string      `json:"lastMessage,omitempty"`
 }
 
 type HealthPolicy struct {

@@ -41,3 +41,31 @@ func (in *HealthPolicyList) DeepCopyObject() runtime.Object {
 
 	return out
 }
+
+func (in *QueueEvent) DeepCopyObject() runtime.Object {
+	if in == nil {
+		return nil
+	}
+
+	out := new(QueueEvent)
+	*out = *in
+	out.ObjectMeta = *in.ObjectMeta.DeepCopy()
+
+	return out
+}
+
+func (in *QueueEventList) DeepCopyObject() runtime.Object {
+	if in == nil {
+		return nil
+	}
+
+	out := new(QueueEventList)
+	*out = *in
+
+	if in.Items != nil {
+		out.Items = make([]QueueEvent, len(in.Items))
+		copy(out.Items, in.Items)
+	}
+
+	return out
+}
