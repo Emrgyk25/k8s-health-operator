@@ -1,6 +1,6 @@
 module github.com/your-org/k8s-health-operator
 
-go 1.26.0
+go 1.23
 
 require (
 	k8s.io/apimachinery v0.31.0

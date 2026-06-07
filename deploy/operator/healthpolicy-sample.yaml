@@ -6,7 +6,7 @@ metadata:
 spec:
   checkIntervalSeconds: 30
   remediationCooldownSeconds: 300
-  prometheusUrl: http://localhost:9090
+  prometheusUrl: http://monitoring-kube-prometheus-prometheus.monitoring.svc:9090
   targetNamespaces:
     - test-app
   podRules:
