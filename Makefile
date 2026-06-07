@@ -19,3 +19,19 @@ namespaces:
 cluster-status:
 	kubectl get nodes -o wide
 	kubectl get pods -A
+
+.PHONY: prometheus-install
+prometheus-install:
+	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true
+	helm repo update
+	helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+		--namespace monitoring \
+		--values deploy/prometheus/values.yaml
+
+.PHONY: prometheus-ui
+prometheus-ui:
+	kubectl port-forward svc/monitoring-kube-prometheus-prometheus 9090:9090 -n monitoring
+
+.PHONY: grafana-ui
+grafana-ui:
+	kubectl port-forward svc/monitoring-grafana 3000:80 -n monitoring
