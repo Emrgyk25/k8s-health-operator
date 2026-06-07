@@ -65,12 +65,12 @@ func (r *PodRestarter) DeletePod(ctx context.Context, finding checker.PodFinding
 
 func isProtectedNamespace(namespace string) bool {
 	protected := map[string]bool{
-		"kube-system":    true,
-		"kube-public":    true,
+		"kube-system":     true,
+		"kube-public":     true,
 		"kube-node-lease": true,
-		"monitoring":     true,
-		"logging":        true,
-		"sre-system":     true,
+		"monitoring":      true,
+		"logging":         true,
+		"sre-system":      true,
 	}
 
 	return protected[namespace]

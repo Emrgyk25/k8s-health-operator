@@ -1,0 +1,73 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: healthpolicies.sre.example.com
+spec:
+  group: sre.example.com
+  scope: Namespaced
+  names:
+    plural: healthpolicies
+    singular: healthpolicy
+    kind: HealthPolicy
+    shortNames:
+      - hp
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                checkIntervalSeconds:
+                  type: integer
+                  format: int32
+                remediationCooldownSeconds:
+                  type: integer
+                  format: int32
+                prometheusUrl:
+                  type: string
+                targetNamespaces:
+                  type: array
+                  items:
+                    type: string
+                podRules:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      query:
+                        type: string
+                      action:
+                        type: string
+                nodeRules:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      query:
+                        type: string
+                      action:
+                        type: string
+                      threshold:
+                        type: string
+            status:
+              type: object
+              properties:
+                lastCheckTime:
+                  type: string
+                  format: date-time
+                findingsCount:
+                  type: integer
+                  format: int32
+                lastMessage:
+                  type: string
+      subresources:
+        status: {}

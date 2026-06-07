@@ -1,0 +1,20 @@
+apiVersion: sre.example.com/v1alpha1
+kind: HealthPolicy
+metadata:
+  name: default-health-policy
+  namespace: sre-system
+spec:
+  checkIntervalSeconds: 30
+  remediationCooldownSeconds: 300
+  prometheusUrl: http://monitoring-kube-prometheus-prometheus.monitoring.svc:9090
+  targetNamespaces:
+    - test-app
+  podRules:
+    - name: restart-on-critical-error
+      query: 'increase(app_error_total{severity="critical",error_code="POD_RESTART_REQUIRED"}[2m]) > 0'
+      action: DeletePod
+  nodeRules:
+    - name: node-memory-high
+      query: '100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 85'
+      action: CreateQueueEvent
+      threshold: "85"
