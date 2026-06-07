@@ -1,0 +1,22 @@
+# Go
+bin/
+dist/
+*.test
+coverage.out
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Kubernetes local files
+kubeconfig
+*.kubeconfig
+
+# Logs
+*.log
+
+# Env
+.env
