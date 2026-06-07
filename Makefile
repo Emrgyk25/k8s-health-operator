@@ -35,3 +35,26 @@ prometheus-ui:
 .PHONY: grafana-ui
 grafana-ui:
 	kubectl port-forward svc/monitoring-grafana 3000:80 -n monitoring
+
+.PHONY: test-app-build
+test-app-build:
+	docker build -t test-app:0.1.0 ./test-app
+
+.PHONY: test-app-load
+test-app-load:
+	kind load docker-image test-app:0.1.0 --name $(CLUSTER_NAME)
+
+.PHONY: test-app-deploy
+test-app-deploy:
+	kubectl apply -f deploy/test-app/
+
+.PHONY: test-app-port-forward
+test-app-port-forward:
+	kubectl port-forward svc/test-app 8080:8080 -n test-app
+
+.PHONY: test-app-logs
+test-app-logs:
+	kubectl logs -f deployment/test-app -n test-app
+
+.PHONY: test-app-restart
+test-app-restart: test-app-build test-app-load test-app-deploy
