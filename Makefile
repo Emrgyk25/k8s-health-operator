@@ -58,3 +58,40 @@ test-app-logs:
 
 .PHONY: test-app-restart
 test-app-restart: test-app-build test-app-load test-app-deploy
+
+.PHONY: eck-install
+eck-install:
+	kubectl create -f https://download.elastic.co/downloads/eck/2.14.0/crds.yaml || true
+	kubectl apply -f https://download.elastic.co/downloads/eck/2.14.0/operator.yaml
+
+.PHONY: logging-deploy
+logging-deploy:
+	kubectl apply -f deploy/elk/
+	kubectl apply -f deploy/fluent-bit/
+
+.PHONY: kibana-ui
+kibana-ui:
+	kubectl port-forward svc/sre-kibana-kb-http 5601:5601 -n logging
+
+.PHONY: elastic-password
+elastic-password:
+	kubectl get secret sre-logs-es-elastic-user -n logging -o go-template='{{.data.elastic | base64decode}}'
+
+.PHONY: operator-build
+operator-build:
+	docker build -t k8s-health-operator:0.1.0 .
+
+.PHONY: operator-load
+operator-load:
+	kind load docker-image k8s-health-operator:0.1.0 --name $(CLUSTER_NAME)
+
+.PHONY: operator-deploy
+operator-deploy:
+	kubectl apply -f deploy/operator/
+
+.PHONY: operator-logs
+operator-logs:
+	kubectl logs -f deployment/k8s-health-operator -n sre-system
+
+.PHONY: setup
+setup: kind-create namespaces prometheus-install eck-install logging-deploy
