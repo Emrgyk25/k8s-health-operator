@@ -1,0 +1,117 @@
+## Architecture Diagram
+
+```mermaid
+flowchart TB
+    %% =========================
+    %% Users / Interfaces
+    %% =========================
+    User["Developer / SRE"]
+
+    PromUI["Prometheus UI<br/>Metric queries"]
+    Grafana["Grafana<br/>Metric dashboards"]
+    Kibana["Kibana<br/>Log search & analysis"]
+
+    %% =========================
+    %% Kubernetes Cluster
+    %% =========================
+    subgraph K8S["Kubernetes Cluster - kind / minikube / cloud"]
+        direction TB
+
+        %% Namespaces
+        subgraph TESTNS["Namespace: test-app"]
+            direction TB
+
+            TestApp["test-app<br/><br/>Endpoints:<br/>/health<br/>/ready<br/>/metrics<br/>/error<br/>/cpu<br/>/memory"]
+
+            TestSvc["Service: test-app<br/>Port: 8080"]
+
+            ServiceMonitor["ServiceMonitor<br/>Scrapes /metrics"]
+
+            TestApp --> TestSvc
+            ServiceMonitor --> TestSvc
+        end
+
+        subgraph MONNS["Namespace: monitoring"]
+            direction TB
+
+            Prometheus["Prometheus<br/>kube-prometheus-stack"]
+            KubeStateMetrics["kube-state-metrics<br/>Cluster / Deployment / Pod metrics"]
+            NodeExporter["node-exporter<br/>Node CPU / Memory metrics"]
+        end
+
+        subgraph SRENS["Namespace: sre-system"]
+            direction TB
+
+            HealthPolicy["HealthPolicy CRD<br/>PromQL rules + actions"]
+
+            Operator["k8s-health-operator<br/>controller-runtime<br/>2 replicas + leader election"]
+
+            PodChecker["PodChecker<br/>Queries app error metrics"]
+
+            NodeChecker["NodeChecker<br/>Queries node resource metrics"]
+
+            PodRestarter["PodRestarter<br/>Deletes selected pod"]
+
+            QueueEvent["QueueEvent CRD<br/>Node limit event queue"]
+
+            Cooldown["CooldownStore<br/>Prevents repeated remediation"]
+
+            HealthPolicy --> Operator
+            Operator --> PodChecker
+            Operator --> NodeChecker
+            Operator --> Cooldown
+            PodChecker --> PodRestarter
+            NodeChecker --> QueueEvent
+        end
+
+        subgraph LOGNS["Namespace: logging"]
+            direction TB
+
+            FluentBit["Fluent Bit DaemonSet<br/>Collects Kubernetes pod logs"]
+
+            Elasticsearch["Elasticsearch<br/>Index: k8s-logs-*"]
+
+            KibanaSvc["Kibana"]
+        end
+
+        %% Runtime actions
+        PodRestarter -->|"delete pod if<br/>sre.io/self-healing=enabled"| TestApp
+
+        %% Metrics flow
+        TestSvc -->|"/metrics"| Prometheus
+        ServiceMonitor --> Prometheus
+        KubeStateMetrics --> Prometheus
+        NodeExporter --> Prometheus
+
+        %% Operator query flow
+        Operator -->|"PromQL queries"| Prometheus
+
+        %% Logging flow
+        TestApp -->|"JSON logs"| FluentBit
+        Operator -->|"JSON logs"| FluentBit
+        FluentBit -->|"TLS + auth"| Elasticsearch
+        Elasticsearch --> KibanaSvc
+    end
+
+    %% UI access
+    User --> PromUI
+    User --> Grafana
+    User --> Kibana
+
+    PromUI --> Prometheus
+    Grafana --> Prometheus
+    Kibana --> KibanaSvc
+
+    %% Styling
+    classDef app fill:#e3f2fd,stroke:#1565c0,stroke-width:1px,color:#0d47a1;
+    classDef monitoring fill:#e8f5e9,stroke:#2e7d32,stroke-width:1px,color:#1b5e20;
+    classDef operator fill:#fff3e0,stroke:#ef6c00,stroke-width:1px,color:#e65100;
+    classDef logging fill:#f3e5f5,stroke:#7b1fa2,stroke-width:1px,color:#4a148c;
+    classDef ui fill:#eeeeee,stroke:#424242,stroke-width:1px,color:#212121;
+
+    class TestApp,TestSvc,ServiceMonitor app;
+    class Prometheus,KubeStateMetrics,NodeExporter,Grafana,PromUI monitoring;
+    class HealthPolicy,Operator,PodChecker,NodeChecker,PodRestarter,QueueEvent,Cooldown operator;
+    class FluentBit,Elasticsearch,KibanaSvc,Kibana logging;
+    class User ui;
+```

@@ -1,74 +1,74 @@
 # k8s-health-operator
 
-`k8s-health-operator` is a Go-based Kubernetes Operator that monitors Prometheus metrics to check Kubernetes pod and node health, and automatically takes action for predefined failure scenarios.
+`k8s-health-operator`, Prometheus metriklerini izleyerek Kubernetes pod ve node sağlık durumlarını kontrol eden, belirli hata senaryolarında otomatik aksiyon alan Go tabanlı bir Kubernetes Operator projesidir.
 
-The main goals of this project are:
+Temel amaç:
 
-* Monitor applications running on a Kubernetes cluster
-* Query pod and node metrics through Prometheus
-* Automatically delete an affected pod when a specific error metric is detected
-* Create a queue event when node resource usage approaches a configured threshold
-* Collect application and operator logs with Fluent Bit and inspect them through Elasticsearch/Kibana
-* Visualize metrics through Grafana dashboards
-
----
-
-## Table of Contents
-
-* [Architecture](#architecture)
-* [Technologies Used](#technologies-used)
-* [Project Structure](#project-structure)
-* [Prerequisites](#prerequisites)
-* [Installation from Scratch](#installation-from-scratch)
-* [Test Scenarios](#test-scenarios)
-* [Prometheus Usage](#prometheus-usage)
-* [Grafana Usage](#grafana-usage)
-* [Kibana Usage](#kibana-usage)
-* [QueueEvent Test](#queueevent-test)
-* [Security Approach](#security-approach)
-* [Concurrency and Leader Election](#concurrency-and-leader-election)
-* [Known Limitations](#known-limitations)
-* [Makefile Commands](#makefile-commands)
+* Kubernetes cluster üzerinde çalışan uygulamaları izlemek
+* Prometheus üzerinden pod/node metriklerini sorgulamak
+* Belirli bir hata metriği oluştuğunda ilgili pod’u otomatik silmek
+* Node kaynak kullanımı belirlenen eşiklere yaklaştığında queue event oluşturmak
+* Uygulama ve operator loglarını Fluent Bit ile toplayıp Elasticsearch/Kibana üzerinden görüntülemek
+* Grafana üzerinden metrikleri dashboard olarak izlemek
 
 ---
 
-## Architecture
+## İçindekiler
 
-The overall system flow is as follows:
+* [Mimari](#mimari)
+* [Kullanılan Teknolojiler](#kullanılan-teknolojiler)
+* [Proje Yapısı](#proje-yapısı)
+* [Kurulum Ön Gereksinimleri](#kurulum-ön-gereksinimleri)
+* [Sıfırdan Kurulum](#sıfırdan-kurulum)
+* [Test Senaryoları](#test-senaryoları)
+* [Prometheus Kullanımı](#prometheus-kullanımı)
+* [Grafana Kullanımı](#grafana-kullanımı)
+* [Kibana Kullanımı](#kibana-kullanımı)
+* [QueueEvent Testi](#queueevent-testi)
+* [Güvenlik Yaklaşımı](#güvenlik-yaklaşımı)
+* [Concurrency ve Leader Election](#concurrency-ve-leader-election)
+* [Bilinen Kısıtlar](#bilinen-kısıtlar)
+* [Makefile Komutları](#makefile-komutları)
+
+---
+
+## Mimari
+
+Genel sistem akışı aşağıdaki gibidir:
 
 ```text
 test-app
-  ├── exposes metrics to Prometheus through the /metrics endpoint
-  ├── produces an error metric through the /error endpoint
-  └── emits JSON logs
+  ├── /metrics endpoint'i ile Prometheus'a metric verir
+  ├── /error endpoint'i ile hata metriği üretir
+  └── JSON log üretir
 
 Prometheus
-  ├── collects test-app metrics
-  ├── collects Kubernetes cluster, pod, deployment, and node metrics
-  └── is queried by the operator
+  ├── test-app metriclerini toplar
+  ├── Kubernetes cluster, pod, deployment ve node metriclerini toplar
+  └── operator tarafından sorgulanır
 
 k8s-health-operator
-  ├── watches the HealthPolicy CRD
-  ├── sends PromQL queries to Prometheus
-  ├── deletes a pod when a critical error metric is detected
-  ├── creates a QueueEvent when node resource usage is high
-  └── uses leader election to safely run multiple operator instances
+  ├── HealthPolicy CRD'sini izler
+  ├── Prometheus'a PromQL query gönderir
+  ├── Kritik hata metriği bulursa pod'u siler
+  ├── Node kaynak kullanımı yüksekse QueueEvent oluşturur
+  └── Leader election ile çoklu instance çalışmasını güvenli hale getirir
 
 Fluent Bit
-  ├── collects Kubernetes pod logs
-  └── forwards logs to Elasticsearch
+  ├── Kubernetes pod loglarını toplar
+  └── Elasticsearch'e gönderir
 
 Elasticsearch
-  └── stores logs under k8s-logs-* indices
+  └── Logları k8s-logs-* indexleri altında saklar
 
 Kibana
-  └── is used to search and inspect logs
+  └── Logların aranması ve incelenmesi için kullanılır
 
 Grafana
-  └── visualizes Prometheus metrics as dashboards
+  └── Prometheus metriclerini dashboard olarak gösterir
 ```
 
-Simple architecture diagram:
+Basit mimari diyagram:
 
 ```text
 ┌────────────────────┐
@@ -121,35 +121,35 @@ Simple architecture diagram:
 
 ---
 
-## Technologies Used
+## Kullanılan Teknolojiler
 
-| Component             | Purpose                                                               |
-| --------------------- | --------------------------------------------------------------------- |
-| kind                  | Creating a local Kubernetes cluster                                   |
-| Kubernetes            | Runtime environment for the application and operator                  |
-| Go                    | Programming language for the operator and test application            |
-| controller-runtime    | Building the Kubernetes operator/controller                           |
-| Prometheus            | Metric collection and querying                                        |
-| kube-prometheus-stack | Installing Prometheus, Grafana, kube-state-metrics, and node-exporter |
-| Grafana               | Visualizing Prometheus metrics                                        |
-| ECK                   | Managing Elasticsearch and Kibana on Kubernetes                       |
-| Elasticsearch         | Storing and indexing logs                                             |
-| Kibana                | Searching and inspecting logs                                         |
-| Fluent Bit            | Collecting Kubernetes pod logs                                        |
-| Docker                | Building container images                                             |
-| Makefile              | Simplifying installation and operational commands                     |
+| Bileşen               | Amaç                                                            |
+| --------------------- | --------------------------------------------------------------- |
+| kind                  | Lokal Kubernetes cluster oluşturmak                             |
+| Kubernetes            | Uygulama ve operator runtime ortamı                             |
+| Go                    | Operator ve test uygulaması geliştirme dili                     |
+| controller-runtime    | Kubernetes operator/controller geliştirme                       |
+| Prometheus            | Metric toplama ve sorgulama                                     |
+| kube-prometheus-stack | Prometheus, Grafana, kube-state-metrics, node-exporter kurulumu |
+| Grafana               | Prometheus metriclerini görselleştirme                          |
+| ECK                   | Elasticsearch ve Kibana yönetimi                                |
+| Elasticsearch         | Log saklama ve indexleme                                        |
+| Kibana                | Log arama ve inceleme arayüzü                                   |
+| Fluent Bit            | Kubernetes pod loglarını toplama                                |
+| Docker                | Image build işlemleri                                           |
+| Makefile              | Kurulum ve operasyon komutlarını kolaylaştırma                  |
 
-Note: This project uses an **EFK-style** logging stack instead of the classic Logstash-based ELK stack:
+Not: Bu projede klasik Logstash tabanlı ELK yerine **EFK benzeri** bir yapı kullanılmıştır:
 
 ```text
 Fluent Bit + Elasticsearch + Kibana
 ```
 
-Fluent Bit is used instead of Logstash because it is lightweight and practical for Kubernetes DaemonSet-based log forwarding.
+Fluent Bit, Logstash yerine kullanılmıştır çünkü Kubernetes DaemonSet olarak hafif ve pratik log forwarding sağlar.
 
 ---
 
-## Project Structure
+## Proje Yapısı
 
 ```text
 k8s-health-operator/
@@ -223,17 +223,17 @@ k8s-health-operator/
 
 ---
 
-## Prerequisites
+## Kurulum Ön Gereksinimleri
 
-The following tools are required on macOS:
+macOS üzerinde aşağıdaki araçlar gereklidir:
 
 ```bash
 brew install kind kubectl helm
 ```
 
-Docker Desktop must be installed and running.
+Docker Desktop kurulu ve açık olmalıdır.
 
-Verify the installation:
+Kontrol:
 
 ```bash
 docker version
@@ -244,9 +244,9 @@ helm version
 
 ---
 
-## Installation from Scratch
+## Sıfırdan Kurulum
 
-### 1. Go to the project directory
+### 1. Proje klasörüne gir
 
 ```bash
 cd ~/Desktop/k8s-health-operator
@@ -254,24 +254,24 @@ cd ~/Desktop/k8s-health-operator
 
 ---
 
-### 2. Check Elasticsearch and Kibana versions
+### 2. Elasticsearch ve Kibana versiyonunu kontrol et
 
-Elasticsearch `9.0.0` is not supported with ECK `2.14.0`, so the manifests should use `8.15.0`.
+ECK 2.14.0 ile `9.0.0` Elasticsearch versiyonu desteklenmediği için manifestlerde `8.15.0` kullanılmalıdır.
 
-Check:
+Kontrol:
 
 ```bash
 grep -R "version:" deploy/elk/
 ```
 
-Expected:
+Beklenen:
 
 ```text
 deploy/elk/elasticsearch.yaml:  version: 8.15.0
 deploy/elk/kibana.yaml:  version: 8.15.0
 ```
 
-If you see `9.0.0`, update it:
+Eğer `9.0.0` görürsen düzelt:
 
 ```bash
 sed -i '' 's/version: 9.0.0/version: 8.15.0/g' deploy/elk/elasticsearch.yaml
@@ -280,19 +280,19 @@ sed -i '' 's/version: 9.0.0/version: 8.15.0/g' deploy/elk/kibana.yaml
 
 ---
 
-### 3. Create the kind cluster
+### 3. kind cluster oluştur
 
 ```bash
 make kind-create
 ```
 
-Check the nodes:
+Kontrol:
 
 ```bash
 kubectl get nodes
 ```
 
-Expected:
+Beklenen:
 
 ```text
 sre-case-control-plane   Ready
@@ -302,13 +302,13 @@ sre-case-worker2         Ready
 
 ---
 
-### 4. Create namespaces
+### 4. Namespace’leri oluştur
 
 ```bash
 make namespaces
 ```
 
-The following namespaces should be created:
+Oluşması gereken namespace’ler:
 
 ```text
 monitoring
@@ -317,7 +317,7 @@ test-app
 logging
 ```
 
-Verify:
+Kontrol:
 
 ```bash
 kubectl get ns
@@ -325,19 +325,19 @@ kubectl get ns
 
 ---
 
-### 5. Install Prometheus and Grafana
+### 5. Prometheus ve Grafana kurulumu
 
 ```bash
 make prometheus-install
 ```
 
-Verify:
+Kontrol:
 
 ```bash
 kubectl get pods -n monitoring
 ```
 
-Expected pods:
+Beklenen podlar:
 
 ```text
 monitoring-grafana-...
@@ -349,13 +349,13 @@ prometheus-monitoring-kube-prometheus-prometheus-0
 
 ---
 
-### 6. Install ECK
+### 6. ECK kurulumu
 
 ```bash
 make eck-install
 ```
 
-Wait until the ECK operator is ready:
+ECK operator hazır olana kadar bekle:
 
 ```bash
 kubectl wait --for=condition=Ready pod \
@@ -363,13 +363,13 @@ kubectl wait --for=condition=Ready pod \
   -n elastic-system --timeout=180s
 ```
 
-Verify:
+Kontrol:
 
 ```bash
 kubectl get pods -n elastic-system
 ```
 
-Expected:
+Beklenen:
 
 ```text
 elastic-operator-xxxxx   1/1   Running
@@ -377,59 +377,59 @@ elastic-operator-xxxxx   1/1   Running
 
 ---
 
-### 7. Install Elasticsearch and Kibana
+### 7. Elasticsearch ve Kibana kurulumu
 
 ```bash
 kubectl apply -f deploy/elk/elasticsearch.yaml
 kubectl apply -f deploy/elk/kibana.yaml
 ```
 
-Watch the pods:
+Podları izle:
 
 ```bash
 kubectl get pods -n logging -w
 ```
 
-Expected:
+Beklenen:
 
 ```text
 sre-logs-es-default-0      1/1   Running
 sre-kibana-kb-xxxxx        1/1   Running
 ```
 
-Wait until Elasticsearch is ready:
+Elasticsearch hazır olana kadar beklemek için:
 
 ```bash
 kubectl wait --for=condition=Ready pod/sre-logs-es-default-0 \
   -n logging --timeout=300s
 ```
 
-Verify:
+Kontrol:
 
 ```bash
 kubectl get elasticsearch -n logging
 kubectl get kibana -n logging
 ```
 
-In a single-node Elasticsearch environment, `yellow` health is expected and acceptable.
+Tek node Elasticsearch ortamında `yellow` health normaldir.
 
 ---
 
-### 8. Install Fluent Bit
+### 8. Fluent Bit kurulumu
 
-Fluent Bit should be installed after Elasticsearch is ready:
+Elasticsearch hazır olduktan sonra Fluent Bit kurulmalıdır:
 
 ```bash
 kubectl apply -f deploy/fluent-bit/
 ```
 
-Verify:
+Kontrol:
 
 ```bash
 kubectl get pods -n logging
 ```
 
-Expected:
+Beklenen:
 
 ```text
 fluent-bit-xxxxx   1/1   Running
@@ -437,7 +437,7 @@ fluent-bit-yyyyy   1/1   Running
 fluent-bit-zzzzz   1/1   Running
 ```
 
-Check logs:
+Log kontrolü:
 
 ```bash
 kubectl logs -f daemonset/fluent-bit -n logging
@@ -445,7 +445,7 @@ kubectl logs -f daemonset/fluent-bit -n logging
 
 ---
 
-### 9. Deploy the test application
+### 9. Test uygulamasını deploy et
 
 ```bash
 make test-app-build
@@ -453,7 +453,7 @@ make test-app-load
 make test-app-deploy
 ```
 
-Verify:
+Kontrol:
 
 ```bash
 kubectl get pods -n test-app
@@ -461,7 +461,7 @@ kubectl get svc -n test-app
 kubectl get servicemonitor -n test-app
 ```
 
-Expected:
+Beklenen:
 
 ```text
 test-app-xxxxx   1/1   Running
@@ -469,23 +469,23 @@ service/test-app
 servicemonitor/test-app
 ```
 
-Check pod labels:
+Pod label kontrolü:
 
 ```bash
 kubectl get pods -n test-app --show-labels
 ```
 
-Pods must have the following label:
+Podlarda şu label olmalıdır:
 
 ```text
 sre.io/self-healing=enabled
 ```
 
-The operator will not remediate pods that do not have this label.
+Bu label olmayan podlara operator müdahale etmez.
 
 ---
 
-### 10. Build, load, and deploy the operator
+### 10. Operator build/load/deploy
 
 ```bash
 make operator-build
@@ -493,7 +493,7 @@ make operator-load
 make operator-deploy
 ```
 
-Verify:
+Kontrol:
 
 ```bash
 kubectl get crd | grep -E "healthpolicies|queueevents"
@@ -501,7 +501,7 @@ kubectl get healthpolicy -n sre-system
 kubectl get pods -n sre-system
 ```
 
-Expected:
+Beklenen:
 
 ```text
 healthpolicies.sre.example.com
@@ -515,11 +515,11 @@ k8s-health-operator-yyyyy   1/1   Running
 
 ---
 
-## HealthPolicy Example
+## HealthPolicy Örneği
 
-`HealthPolicy` defines which Prometheus queries the operator should run and which actions it should take.
+`HealthPolicy`, operator’ün hangi Prometheus query’lerini çalıştıracağını ve hangi aksiyonları alacağını tanımlar.
 
-Example:
+Örnek:
 
 ```yaml
 apiVersion: sre.example.com/v1alpha1
@@ -544,13 +544,13 @@ spec:
       threshold: "85"
 ```
 
-Pod query used for the demo:
+Demo için kullanılan pod query:
 
 ```promql
 app_error_total{namespace="test-app",severity="critical",error_code="POD_RESTART_REQUIRED"} > 0
 ```
 
-A more production-like query example:
+Daha gerçekçi production query örneği:
 
 ```promql
 increase(app_error_total{namespace="test-app",severity="critical",error_code="POD_RESTART_REQUIRED"}[5m]) > 0
@@ -558,35 +558,35 @@ increase(app_error_total{namespace="test-app",severity="critical",error_code="PO
 
 ---
 
-## Test Scenarios
+## Test Senaryoları
 
-### 1. Check test app health
+### 1. Test app health kontrolü
 
-Open port-forward:
+Port-forward aç:
 
 ```bash
 kubectl port-forward svc/test-app 8080:8080 -n test-app
 ```
 
-In another terminal:
+Başka terminalde:
 
 ```bash
 curl http://localhost:8080/health
 ```
 
-Expected:
+Beklenen:
 
 ```json
 {"status":"healthy"}
 ```
 
-Check readiness:
+Ready kontrolü:
 
 ```bash
 curl http://localhost:8080/ready
 ```
 
-Expected:
+Beklenen:
 
 ```json
 {"status":"ready"}
@@ -594,13 +594,13 @@ Expected:
 
 ---
 
-### 2. Generate an error metric
+### 2. Hata metriği üretme
 
 ```bash
 curl http://localhost:8080/error
 ```
 
-Expected response:
+Beklenen response:
 
 ```json
 {
@@ -611,13 +611,13 @@ Expected response:
 }
 ```
 
-Check the metric:
+Metric kontrolü:
 
 ```bash
 curl http://localhost:8080/metrics | grep app_error_total
 ```
 
-Expected:
+Beklenen:
 
 ```text
 app_error_total{error_code="POD_RESTART_REQUIRED",severity="critical"} 1
@@ -625,22 +625,22 @@ app_error_total{error_code="POD_RESTART_REQUIRED",severity="critical"} 1
 
 ---
 
-### 3. Check the metric in Prometheus
+### 3. Prometheus metric kontrolü
 
-Open Prometheus port-forward:
+Prometheus port-forward:
 
 ```bash
 kubectl port-forward svc/monitoring-kube-prometheus-prometheus 9091:9090 -n monitoring
 ```
 
-Query the metric:
+Metric sorgusu:
 
 ```bash
 curl -sG "http://localhost:9091/api/v1/query" \
   --data-urlencode 'query=app_error_total' | jq '.data.result[].metric'
 ```
 
-Expected labels:
+Beklenen label’lar:
 
 ```json
 {
@@ -657,32 +657,32 @@ Expected labels:
 }
 ```
 
-Test the HealthPolicy query directly:
+HealthPolicy query’sini birebir test etmek için:
 
 ```bash
 curl -sG "http://localhost:9091/api/v1/query" \
   --data-urlencode 'query=app_error_total{namespace="test-app",severity="critical",error_code="POD_RESTART_REQUIRED"} > 0' | jq '.data.result'
 ```
 
-The result should not be empty.
+Sonuç boş dönmemelidir.
 
 ---
 
-### 4. Test pod remediation
+### 4. Pod remediation testi
 
-Watch pods in one terminal:
+Bir terminalde podları izle:
 
 ```bash
 kubectl get pods -n test-app -w
 ```
 
-Generate an error from another terminal:
+Başka terminalde hata üret:
 
 ```bash
 curl http://localhost:8080/error
 ```
 
-Expected behavior:
+Beklenen davranış:
 
 ```text
 test-app-xxxxx   1/1   Terminating
@@ -691,30 +691,30 @@ test-app-yyyyy   0/1   ContainerCreating
 test-app-yyyyy   1/1   Running
 ```
 
-This flow means:
+Bu akış şu anlama gelir:
 
 ```text
-1. The test-app /error endpoint produced an error metric.
-2. Prometheus scraped the metric.
-3. k8s-health-operator queried Prometheus.
-4. The HealthPolicy pod rule matched.
-5. The operator deleted the affected pod.
-6. The Kubernetes Deployment created a new pod.
+1. test-app /error endpoint'i hata metriği üretti.
+2. Prometheus bu metriği scrape etti.
+3. k8s-health-operator Prometheus'u sorguladı.
+4. HealthPolicy pod rule eşleşti.
+5. Operator ilgili pod'u sildi.
+6. Kubernetes Deployment yeni pod oluşturdu.
 ```
 
-Check operator logs:
+Operator log kontrolü:
 
 ```bash
 kubectl logs deployment/k8s-health-operator -n sre-system --tail=150
 ```
 
-Expected log examples:
+Beklenen loglardan biri:
 
 ```text
 deleting pod because critical metric detected
 ```
 
-If cooldown is active:
+Cooldown aktifse:
 
 ```text
 skipping pod remediation because cooldown is active
@@ -722,21 +722,21 @@ skipping pod remediation because cooldown is active
 
 ---
 
-## Prometheus Usage
+## Prometheus Kullanımı
 
-Open Prometheus:
+Prometheus’u açmak için:
 
 ```bash
 kubectl port-forward svc/monitoring-kube-prometheus-prometheus 9091:9090 -n monitoring
 ```
 
-Open in browser:
+Tarayıcıdan:
 
 ```text
 http://localhost:9091
 ```
 
-Example PromQL queries:
+Örnek PromQL sorguları:
 
 ```promql
 app_error_total
@@ -776,27 +776,27 @@ sum(kube_pod_status_phase{namespace="test-app", phase="Running"})
 
 ---
 
-## Grafana Usage
+## Grafana Kullanımı
 
-Open Grafana:
+Grafana’yı açmak için:
 
 ```bash
 kubectl port-forward svc/monitoring-grafana 3000:80 -n monitoring
 ```
 
-Open in browser:
+Tarayıcıdan:
 
 ```text
 http://localhost:3000
 ```
 
-Username:
+Kullanıcı adı:
 
 ```text
 admin
 ```
 
-Get the password:
+Şifreyi almak için:
 
 ```bash
 kubectl get secret monitoring-grafana -n monitoring \
@@ -804,21 +804,21 @@ kubectl get secret monitoring-grafana -n monitoring \
 echo
 ```
 
-If `adminPassword: admin` is defined in the Helm values:
+Eğer Helm values içinde `adminPassword: admin` tanımlıysa:
 
 ```text
 admin / admin
 ```
 
-To create a Grafana dashboard:
+Grafana’da dashboard oluşturmak için:
 
 ```text
 Dashboards → New → New dashboard → Add visualization
 ```
 
-Select Prometheus as the data source.
+Data source olarak Prometheus seçilir.
 
-Recommended panels:
+Önerilen paneller:
 
 ### Critical Application Errors
 
@@ -862,31 +862,31 @@ kube_pod_container_status_restarts_total{namespace="test-app"}
 100 - (avg by(instance)(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
 ```
 
-Note: Grafana is only the visualization layer. The operator does not make decisions through Grafana. The operator queries the Prometheus API directly.
+Not: Grafana sadece görselleştirme katmanıdır. Operator kararlarını Grafana üzerinden almaz. Operator doğrudan Prometheus API’sini sorgular.
 
 ---
 
-## Kibana Usage
+## Kibana Kullanımı
 
-Open Kibana:
+Kibana’yı açmak için:
 
 ```bash
 kubectl port-forward svc/sre-kibana-kb-http 5601:5601 -n logging
 ```
 
-Open in browser:
+Tarayıcıdan:
 
 ```text
 https://localhost:5601
 ```
 
-Username:
+Kullanıcı adı:
 
 ```text
 elastic
 ```
 
-Password:
+Şifre:
 
 ```bash
 kubectl get secret sre-logs-es-elastic-user -n logging \
@@ -894,28 +894,30 @@ kubectl get secret sre-logs-es-elastic-user -n logging \
 echo
 ```
 
-### Create a Data View
+### Data View Oluşturma
 
-In Kibana:
+Kibana’da:
 
 ```text
 Stack Management → Data Views → Create data view
 ```
 
-Use the following values:
+Değerler:
 
 ```text
 Index pattern: k8s-logs-*
 Time field: @timestamp
 ```
 
-Then open:
+Sonra:
 
 ```text
 Discover
 ```
 
-Example searches:
+ekranına girilir.
+
+Aranabilecek örnekler:
 
 ```text
 POD_RESTART_REQUIRED
@@ -939,15 +941,15 @@ kubernetes.namespace_name : "sre-system"
 
 ---
 
-## Elasticsearch Check
+## Elasticsearch Kontrolü
 
-Open Elasticsearch API port-forward:
+Elasticsearch API port-forward:
 
 ```bash
 kubectl port-forward svc/sre-logs-es-http 9200:9200 -n logging
 ```
 
-In another terminal:
+Başka terminalde:
 
 ```bash
 export ELASTIC_PASSWORD=$(kubectl get secret sre-logs-es-elastic-user -n logging -o=jsonpath='{.data.elastic}' | base64 --decode)
@@ -955,13 +957,13 @@ export ELASTIC_PASSWORD=$(kubectl get secret sre-logs-es-elastic-user -n logging
 curl -k -u "elastic:${ELASTIC_PASSWORD}" "https://localhost:9200/_cat/indices?v"
 ```
 
-Expected index:
+Beklenen index:
 
 ```text
 k8s-logs-YYYY.MM.DD
 ```
 
-Check log count:
+Log sayısı kontrolü:
 
 ```bash
 curl -k -u "elastic:${ELASTIC_PASSWORD}" "https://localhost:9200/k8s-logs-*/_count?pretty"
@@ -969,15 +971,15 @@ curl -k -u "elastic:${ELASTIC_PASSWORD}" "https://localhost:9200/k8s-logs-*/_cou
 
 ---
 
-## QueueEvent Test
+## QueueEvent Testi
 
-The normal node resource threshold is configured as `85%`:
+Node resource threshold normalde `%85` olarak ayarlanmıştır:
 
 ```promql
 100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 85
 ```
 
-In a local kind environment, reaching this threshold realistically can be difficult. For testing, the threshold can temporarily be lowered to `1%`:
+Lokal kind ortamında bu eşiği gerçekçi şekilde tetiklemek zor olabilir. Test için geçici olarak threshold `%1` yapılabilir:
 
 ```bash
 kubectl patch healthpolicy default-health-policy \
@@ -992,20 +994,20 @@ kubectl patch healthpolicy default-health-policy \
   ]'
 ```
 
-After a short wait:
+Bir süre bekledikten sonra:
 
 ```bash
 kubectl get queueevents -n sre-system
 kubectl describe queueevent -n sre-system
 ```
 
-Expected:
+Beklenen:
 
 ```text
 noderesourcelimit-...
 ```
 
-After the test, restore the original query:
+Test bittikten sonra query eski değerine çekilmelidir:
 
 ```bash
 kubectl patch healthpolicy default-health-policy \
@@ -1020,7 +1022,7 @@ kubectl patch healthpolicy default-health-policy \
   ]'
 ```
 
-Delete QueueEvents if needed:
+QueueEvent temizlemek için:
 
 ```bash
 kubectl delete queueevents --all -n sre-system
@@ -1028,126 +1030,126 @@ kubectl delete queueevents --all -n sre-system
 
 ---
 
-## Security Approach
+## Güvenlik Yaklaşımı
 
-The project applies the following security practices:
+Projede aşağıdaki güvenlik yaklaşımları uygulanmıştır:
 
-| Security Measure          | Description                                                                                                                        |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Opt-in remediation        | Only pods with the `sre.io/self-healing=enabled` label are remediated                                                              |
-| Protected namespaces      | The operator does not remediate pods in namespaces such as `kube-system`, `kube-public`, `monitoring`, `logging`, and `sre-system` |
-| Minimal RBAC              | The operator is granted only the permissions it needs                                                                              |
-| Non-root container        | The operator container runs as a non-root user                                                                                     |
-| Read-only root filesystem | The operator deployment can run with a read-only root filesystem                                                                   |
-| Distroless image          | A minimal image without a shell is used                                                                                            |
-| TLS log forwarding        | Fluent Bit sends logs to Elasticsearch using TLS and authentication                                                                |
-| Cooldown                  | Repeated remediation for the same pod is prevented                                                                                 |
+| Güvenlik Önlemi           | Açıklama                                                                                                 |
+| ------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Opt-in remediation        | Sadece `sre.io/self-healing=enabled` label’ı olan podlara müdahale edilir                                |
+| Protected namespaces      | `kube-system`, `kube-public`, `monitoring`, `logging`, `sre-system` gibi namespace’lere müdahale edilmez |
+| Minimal RBAC              | Operator sadece ihtiyaç duyduğu kaynaklar için yetkilendirilir                                           |
+| Non-root container        | Operator container non-root user ile çalışır                                                             |
+| Read-only root filesystem | Operator deployment üzerinde read-only root filesystem kullanılabilir                                    |
+| Distroless image          | Minimal ve shell içermeyen image kullanılır                                                              |
+| TLS log forwarding        | Fluent Bit, Elasticsearch’e TLS ve authentication ile log gönderir                                       |
+| Cooldown                  | Aynı pod için tekrarlı müdahale engellenir                                                               |
 
 ---
 
-## Concurrency and Leader Election
+## Concurrency ve Leader Election
 
-The operator is designed to run with multiple replicas.
+Operator birden fazla replica ile çalışacak şekilde tasarlanmıştır.
 
-The deployment can be scaled to 2 replicas:
+Deployment 2 replica olarak çalıştırılabilir:
 
 ```bash
 kubectl scale deployment/k8s-health-operator -n sre-system --replicas=2
 ```
 
-Leader election ensures that only one operator instance performs reconciliation at a time.
+Leader election sayesinde aynı anda sadece bir operator instance reconcile işlemi yapar.
 
-Check the leader lease:
+Leader kontrolü:
 
 ```bash
 kubectl get lease -n sre-system
 ```
 
-Show the current leader holder:
+Leader holder bilgisini görmek için:
 
 ```bash
 kubectl get lease -n sre-system k8s-health-operator.sre.example.com \
   -o jsonpath='{.spec.holderIdentity}{"\n"}'
 ```
 
-This prevents multiple operator instances from acting on the same pod at the same time.
+Bu yaklaşım aynı pod üzerinde iki farklı operator instance’ın aynı anda işlem yapmasını engeller.
 
 ---
 
-## Known Limitations
+## Bilinen Kısıtlar
 
-* `CooldownStore` is stored in memory. If the operator restarts, cooldown data is reset.
-* `HealthPolicy.status` fields are updated at a basic level, but a production-ready implementation could include richer status management.
-* `targetNamespaces` exists in the CRD, but in the MVP namespace filtering is mostly handled through PromQL queries.
-* `QueueEvent` objects are created, but there is no separate QueueEvent controller/processor yet.
-* `zz_generated.deepcopy.go` may be manually added for the MVP. In production projects, it should be generated using `controller-gen`.
-* In a local kind environment with a single-node Elasticsearch setup, index health may be `yellow`.
-* The demo query `app_error_total > 0` can be aggressive. For production-like scenarios, a more controlled query such as `increase(...[5m]) > 0` is recommended.
-
----
-
-## Makefile Commands
-
-| Command                      | Description                                                       |
-| ---------------------------- | ----------------------------------------------------------------- |
-| `make kind-create`           | Creates the kind cluster                                          |
-| `make kind-delete`           | Deletes the kind cluster                                          |
-| `make namespaces`            | Creates the required namespaces                                   |
-| `make cluster-status`        | Shows cluster node and pod status                                 |
-| `make prometheus-install`    | Installs kube-prometheus-stack                                    |
-| `make prometheus-ui`         | Opens Prometheus port-forward                                     |
-| `make grafana-ui`            | Opens Grafana port-forward                                        |
-| `make eck-install`           | Installs the ECK operator                                         |
-| `make logging-deploy`        | Applies Elasticsearch, Kibana, and Fluent Bit manifests           |
-| `make kibana-ui`             | Opens Kibana port-forward                                         |
-| `make elastic-password`      | Prints the Elasticsearch `elastic` user password                  |
-| `make test-app-build`        | Builds the test-app Docker image                                  |
-| `make test-app-load`         | Loads the test-app image into the kind cluster                    |
-| `make test-app-deploy`       | Applies test-app manifests                                        |
-| `make test-app-port-forward` | Opens port-forward for test-app                                   |
-| `make test-app-logs`         | Follows test-app logs                                             |
-| `make operator-build`        | Builds the operator Docker image                                  |
-| `make operator-load`         | Loads the operator image into the kind cluster                    |
-| `make operator-deploy`       | Installs operator CRDs, RBAC, deployment, and sample HealthPolicy |
-| `make operator-logs`         | Follows operator logs                                             |
-| `make setup`                 | Installs the base infrastructure stack                            |
+* `CooldownStore` in-memory olarak tutulur. Operator restart olursa cooldown bilgisi sıfırlanır.
+* `HealthPolicy.status` alanları temel seviyede güncellenir, ancak production seviyesinde daha detaylı status yönetimi yapılabilir.
+* `targetNamespaces` alanı CRD’de vardır, ancak MVP’de namespace filtreleme çoğunlukla PromQL query üzerinden yapılmaktadır.
+* `QueueEvent` objeleri oluşturulur, ancak bunları işleyen ayrı bir QueueEvent controller henüz yoktur.
+* `zz_generated.deepcopy.go` MVP kapsamında manuel olarak eklenmiş olabilir. Production projelerde `controller-gen` ile üretilmesi önerilir.
+* Lokal kind ortamında tek node Elasticsearch kullanıldığı için index health `yellow` olabilir.
+* Demo için kullanılan query `app_error_total > 0` gibi agresif davranabilir. Production senaryoda `increase(...[5m]) > 0` gibi daha kontrollü query kullanılması önerilir.
 
 ---
 
-## Short Demo Flow
+## Makefile Komutları
 
-To demonstrate the end-to-end system:
+| Komut                        | Açıklama                                                    |
+| ---------------------------- | ----------------------------------------------------------- |
+| `make kind-create`           | kind cluster oluşturur                                      |
+| `make kind-delete`           | kind cluster siler                                          |
+| `make namespaces`            | Gerekli namespace’leri oluşturur                            |
+| `make cluster-status`        | Cluster node ve pod durumlarını gösterir                    |
+| `make prometheus-install`    | kube-prometheus-stack kurar                                 |
+| `make prometheus-ui`         | Prometheus port-forward açar                                |
+| `make grafana-ui`            | Grafana port-forward açar                                   |
+| `make eck-install`           | ECK operator kurar                                          |
+| `make logging-deploy`        | Elasticsearch, Kibana ve Fluent Bit manifestlerini uygular  |
+| `make kibana-ui`             | Kibana port-forward açar                                    |
+| `make elastic-password`      | Elasticsearch elastic kullanıcısı şifresini gösterir        |
+| `make test-app-build`        | test-app Docker image build eder                            |
+| `make test-app-load`         | test-app image’ını kind cluster’a yükler                    |
+| `make test-app-deploy`       | test-app manifestlerini uygular                             |
+| `make test-app-port-forward` | test-app için port-forward açar                             |
+| `make test-app-logs`         | test-app loglarını izler                                    |
+| `make operator-build`        | operator Docker image build eder                            |
+| `make operator-load`         | operator image’ını kind cluster’a yükler                    |
+| `make operator-deploy`       | operator CRD, RBAC, deployment ve sample HealthPolicy kurar |
+| `make operator-logs`         | operator loglarını izler                                    |
+| `make setup`                 | temel altyapı kurulumunu yapar                              |
+
+---
+
+## Kısa Demo Akışı
+
+Sistemin uçtan uca çalıştığını göstermek için:
 
 ```bash
 kubectl port-forward svc/test-app 8080:8080 -n test-app
 ```
 
-Watch pods in another terminal:
+Başka terminalde podları izle:
 
 ```bash
 kubectl get pods -n test-app -w
 ```
 
-Generate an error in a third terminal:
+Üçüncü terminalde hata üret:
 
 ```bash
 curl http://localhost:8080/error
 ```
 
-Check the Prometheus metric:
+Prometheus metric kontrolü:
 
 ```bash
 curl -sG "http://localhost:9091/api/v1/query" \
   --data-urlencode 'query=app_error_total{namespace="test-app",severity="critical",error_code="POD_RESTART_REQUIRED"} > 0' | jq '.data.result'
 ```
 
-Check operator logs:
+Operator log kontrolü:
 
 ```bash
 kubectl logs deployment/k8s-health-operator -n sre-system --tail=150
 ```
 
-Check Elasticsearch indices:
+Elasticsearch index kontrolü:
 
 ```bash
 export ELASTIC_PASSWORD=$(kubectl get secret sre-logs-es-elastic-user -n logging -o=jsonpath='{.data.elastic}' | base64 --decode)
@@ -1155,7 +1157,7 @@ export ELASTIC_PASSWORD=$(kubectl get secret sre-logs-es-elastic-user -n logging
 curl -k -u "elastic:${ELASTIC_PASSWORD}" "https://localhost:9200/_cat/indices?v"
 ```
 
-Search in Kibana:
+Kibana’da aranacak değer:
 
 ```text
 POD_RESTART_REQUIRED
@@ -1163,19 +1165,19 @@ POD_RESTART_REQUIRED
 
 ---
 
-## Conclusion
+## Sonuç
 
-This project demonstrates an end-to-end Kubernetes remediation flow based on Prometheus metrics.
+Bu proje, Prometheus metriklerine dayalı otomatik Kubernetes remediation akışını uçtan uca göstermektedir.
 
-Summary flow:
+Özet akış:
 
 ```text
-/error endpoint produces an error metric
-Prometheus collects the metric
-k8s-health-operator queries Prometheus through HealthPolicy
-If a critical error metric is found, the affected pod is deleted
-The Kubernetes Deployment creates a new pod
-Fluent Bit forwards JSON logs to Elasticsearch
-Kibana shows logs
-Grafana shows metrics as dashboards
+/error endpoint'i hata metriği üretir
+Prometheus metriği toplar
+k8s-health-operator HealthPolicy üzerinden metriği sorgular
+Kritik hata metriği varsa ilgili pod silinir
+Deployment yeni pod oluşturur
+Fluent Bit JSON logları Elasticsearch'e gönderir
+Kibana logları gösterir
+Grafana metrikleri dashboard olarak gösterir
 ```

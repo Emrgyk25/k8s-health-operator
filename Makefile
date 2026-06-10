@@ -87,7 +87,16 @@ operator-load:
 
 .PHONY: operator-deploy
 operator-deploy:
-	kubectl apply -f deploy/operator/
+	kubectl apply -f deploy/operator/namespace.yaml
+	kubectl apply -f deploy/operator/healthpolicy-crd.yaml
+	kubectl apply -f deploy/operator/queueevent-crd.yaml
+	kubectl wait --for=condition=Established crd/healthpolicies.sre.example.com --timeout=60s
+	kubectl wait --for=condition=Established crd/queueevents.sre.example.com --timeout=60s
+	kubectl apply -f deploy/operator/serviceaccount.yaml
+	kubectl apply -f deploy/operator/clusterrole.yaml
+	kubectl apply -f deploy/operator/clusterrolebinding.yaml
+	kubectl apply -f deploy/operator/deployment.yaml
+	kubectl apply -f deploy/operator/healthpolicy-sample.yaml
 
 .PHONY: operator-logs
 operator-logs:
